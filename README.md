@@ -240,18 +240,6 @@ Measures:
 
 ---
 
-# Performance Graphs
-
-### Encryption Time Distribution
-
-![Encryption Time](encryption_time_distribution.png)
-
-### Ciphertext Size Distribution
-
-![Ciphertext Size](ciphertext_size_distribution.png)
-
----
-
 # Security Features
 
 The system ensures healthcare data security through:
