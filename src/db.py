@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS medical_records (
   nonce BLOB NOT NULL,
   ciphertext BLOB NOT NULL,
   wrapped_key BLOB NOT NULL,
+  sig_alg TEXT,
+  signature BLOB,
+  sig_public_key BLOB,
   created_at TEXT NOT NULL
 );
 
