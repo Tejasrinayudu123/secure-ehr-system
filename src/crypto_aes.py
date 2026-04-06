@@ -1,21 +1,35 @@
+from __future__ import annotations
+
+import base64
 import os
-from dataclasses import dataclass
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-@dataclass
-class AesBlob:
-    nonce: bytes
-    ciphertext: bytes
 
-def aes_keygen() -> bytes:
-    return os.urandom(32)  # AES-256
+def encrypt_record(plaintext: bytes, key: bytes) -> dict[str, str]:
+    """Encrypt bytes with AES-256-GCM.
 
-def aes_encrypt(key: bytes, plaintext: bytes, aad: bytes = b"ehr") -> AesBlob:
-    aesgcm = AESGCM(key)
+    Returns base64-encoded nonce and ciphertext for JSON-friendly transport.
+    """
+    if len(key) != 32:
+        raise ValueError("AES key must be exactly 32 bytes for AES-256-GCM.")
+
     nonce = os.urandom(12)
-    ct = aesgcm.encrypt(nonce, plaintext, aad)
-    return AesBlob(nonce=nonce, ciphertext=ct)
-
-def aes_decrypt(key: bytes, blob: AesBlob, aad: bytes = b"ehr") -> bytes:
     aesgcm = AESGCM(key)
-    return aesgcm.decrypt(blob.nonce, blob.ciphertext, aad)
+    ciphertext = aesgcm.encrypt(nonce, plaintext, None)
+
+    return {
+        "nonce_b64": base64.b64encode(nonce).decode("utf-8"),
+        "ciphertext_b64": base64.b64encode(ciphertext).decode("utf-8"),
+    }
+
+
+def decrypt_record(nonce_b64: str, ciphertext_b64: str, key: bytes) -> bytes:
+    """Decrypt AES-256-GCM encrypted data."""
+    if len(key) != 32:
+        raise ValueError("AES key must be exactly 32 bytes for AES-256-GCM.")
+
+    nonce = base64.b64decode(nonce_b64)
+    ciphertext = base64.b64decode(ciphertext_b64)
+    aesgcm = AESGCM(key)
+
+    return aesgcm.decrypt(nonce, ciphertext, None)

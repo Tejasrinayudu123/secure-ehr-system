@@ -1,140 +1,158 @@
-from datetime import datetime, timezone
-from pathlib import Path
+from __future__ import annotations
 
-from src.db import connect, init_db
-from src.audit import log_event
-from src import rbac
+import base64
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 
-from src.crypto_aes import aes_keygen, aes_encrypt, aes_decrypt, AesBlob
-from src.crypto_rsa import load_or_generate_rsa_keys, rsa_wrap, rsa_unwrap
-from src.crypto_pqc import (
-    mlkem_keygen,
-    mlkem_encapsulate,
-    mlkem_decapsulate,
-    mldsa_keygen,
-    mldsa_sign,
-    mldsa_verify,
+from src.crypto_aes import encrypt_record, decrypt_record
+from src.crypto_kyber import (
+    generate_ml_kem_keypair,
+    encapsulate_shared_secret,
+    decapsulate_shared_secret,
+)
+from src.crypto_dilithium import (
+    generate_ml_dsa_keypair,
+    sign_message,
+    verify_message,
 )
 
-# Persistent RSA keys
-_RSA_KEYS = load_or_generate_rsa_keys(Path("keys/rsa_keypair.pem"))
-
-# In-memory PQC keys for prototype use
-_PQC_KEM_KEYS = mlkem_keygen()
-_PQC_SIG_KEYS = mldsa_keygen()
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+app = FastAPI(
+    title="Secure EHR System API",
+    version="1.0.0",
+    description=(
+        "A demo Electronic Health Record backend using "
+        "ML-KEM-768 (Kyber), ML-DSA-65 (Dilithium), and AES-256-GCM."
+    ),
+)
 
 
-def login(user_id: str, role: str) -> None:
-    init_db()
-    log_event(user_id, role, "LOGIN", None, "User logged in (demo)")
+class EncryptRecordRequest(BaseModel):
+    public_key_b64: str = Field(..., description="Recipient ML-KEM public key in Base64.")
+    patient_id: str
+    patient_name: str
+    diagnosis: str
+    prescription: str
 
 
-def encrypt_and_store_record(
-    user_id: str,
-    role: str,
-    patient_id: str,
-    plaintext: bytes,
-    scheme: str = "RSA-2048 + AES-256",
-) -> None:
-    if role == rbac.ROLE_PATIENT:
-        log_event(user_id, role, "DENY_WRITE", patient_id, "Patient cannot write")
-        raise PermissionError("Access denied: Patient cannot write records.")
+class EncryptRecordResponse(BaseModel):
+    kem_ciphertext_b64: str
+    shared_secret_b64: str
+    aes_nonce_b64: str
+    encrypted_record_b64: str
+    plaintext_preview: str
 
-    sig_alg = None
-    signature = None
-    sig_public_key = None
 
-    if scheme == "RSA-2048 + AES-256":
-        aes_key = aes_keygen()
-        blob = aes_encrypt(aes_key, plaintext)
-        wrapped_key = rsa_wrap(_RSA_KEYS.pub, aes_key)
+class DecryptRecordRequest(BaseModel):
+    secret_key_b64: str = Field(..., description="Recipient ML-KEM secret key in Base64.")
+    kem_ciphertext_b64: str
+    aes_nonce_b64: str
+    encrypted_record_b64: str
 
-    elif scheme == "ML-KEM-768 + AES-256":
-        kem_ciphertext, shared_secret = mlkem_encapsulate(_PQC_KEM_KEYS.public_key)
-        aes_key = shared_secret[:32]  # 32 bytes for AES-256
-        blob = aes_encrypt(aes_key, plaintext)
-        wrapped_key = kem_ciphertext
 
-        sig_alg = "ML-DSA-65"
-        signature = mldsa_sign(_PQC_SIG_KEYS.sig, blob.ciphertext)
-        sig_public_key = _PQC_SIG_KEYS.public_key
+class DecryptRecordResponse(BaseModel):
+    record_json: str
 
-    else:
-        raise ValueError("Unsupported scheme")
 
-    con = connect()
+class SignRequest(BaseModel):
+    secret_key_b64: str
+    message: str
+
+
+class SignResponse(BaseModel):
+    signature_b64: str
+
+
+class VerifyRequest(BaseModel):
+    public_key_b64: str
+    message: str
+    signature_b64: str
+
+
+class VerifyResponse(BaseModel):
+    is_valid: bool
+
+
+@app.get("/")
+def root() -> dict[str, str]:
+    return {"message": "Secure EHR System API is running."}
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/keys/kem")
+def create_kem_keys() -> dict[str, str]:
+    return generate_ml_kem_keypair()
+
+
+@app.get("/keys/sign")
+def create_sign_keys() -> dict[str, str]:
+    return generate_ml_dsa_keypair()
+
+
+@app.post("/encrypt_record", response_model=EncryptRecordResponse)
+def encrypt_record_endpoint(payload: EncryptRecordRequest) -> EncryptRecordResponse:
+    record_json = (
+        "{"
+        f"\"patient_id\": \"{payload.patient_id}\", "
+        f"\"patient_name\": \"{payload.patient_name}\", "
+        f"\"diagnosis\": \"{payload.diagnosis}\", "
+        f"\"prescription\": \"{payload.prescription}\""
+        "}"
+    )
+
+    kem_result = encapsulate_shared_secret(payload.public_key_b64)
+    aes_key = base64.b64decode(kem_result["shared_secret_b64"])
+
+    aes_result = encrypt_record(record_json.encode("utf-8"), aes_key)
+
+    return EncryptRecordResponse(
+        kem_ciphertext_b64=kem_result["ciphertext_b64"],
+        shared_secret_b64=kem_result["shared_secret_b64"],
+        aes_nonce_b64=aes_result["nonce_b64"],
+        encrypted_record_b64=aes_result["ciphertext_b64"],
+        plaintext_preview=record_json,
+    )
+
+
+@app.post("/decrypt_record", response_model=DecryptRecordResponse)
+def decrypt_record_endpoint(payload: DecryptRecordRequest) -> DecryptRecordResponse:
     try:
-        with con:
-            con.execute(
-                """
-                INSERT INTO medical_records
-                (patient_id, created_by, scheme, nonce, ciphertext, wrapped_key, sig_alg, signature, sig_public_key, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    patient_id,
-                    user_id,
-                    scheme,
-                    blob.nonce,
-                    blob.ciphertext,
-                    wrapped_key,
-                    sig_alg,
-                    signature,
-                    sig_public_key,
-                    _now_iso(),
-                ),
-            )
-        log_event(user_id, role, "WRITE_RECORD", patient_id, f"Stored record using {scheme}")
-    finally:
-        con.close()
+        shared_secret = decapsulate_shared_secret(
+            payload.secret_key_b64,
+            payload.kem_ciphertext_b64,
+        )
+        aes_key = base64.b64decode(shared_secret["shared_secret_b64"])
+        plaintext = decrypt_record(
+            payload.aes_nonce_b64,
+            payload.encrypted_record_b64,
+            aes_key,
+        ).decode("utf-8")
+
+        return DecryptRecordResponse(record_json=plaintext)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Decryption failed: {exc}") from exc
 
 
-def fetch_and_decrypt_records(user_id: str, role: str, patient_id: str) -> list[bytes]:
-    if not rbac.can_view(role, user_id, patient_id):
-        log_event(user_id, role, "DENY_READ", patient_id, "RBAC denied read")
-        raise PermissionError("Access denied: cannot view this patient.")
-
-    con = connect()
+@app.post("/sign_data", response_model=SignResponse)
+def sign_data(payload: SignRequest) -> SignResponse:
     try:
-        rows = con.execute(
-            """
-            SELECT nonce, ciphertext, wrapped_key, scheme, sig_alg, signature, sig_public_key
-            FROM medical_records
-            WHERE patient_id=?
-            ORDER BY created_at DESC
-            """,
-            (patient_id,),
-        ).fetchall()
-    finally:
-        con.close()
+        result = sign_message(payload.secret_key_b64, payload.message)
+        return SignResponse(signature_b64=result["signature_b64"])
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Signing failed: {exc}") from exc
 
-    out: list[bytes] = []
 
-    for row in rows:
-        scheme = row["scheme"]
-        blob = AesBlob(nonce=row["nonce"], ciphertext=row["ciphertext"])
-
-        if scheme == "RSA-2048 + AES-256":
-            aes_key = rsa_unwrap(_RSA_KEYS.priv, row["wrapped_key"])
-
-        elif scheme == "ML-KEM-768 + AES-256":
-            if row["signature"] is None or row["sig_public_key"] is None:
-                raise ValueError("Missing ML-DSA signature data")
-            ok = mldsa_verify(row["sig_public_key"], row["ciphertext"], row["signature"])
-            if not ok:
-                raise ValueError("ML-DSA signature verification failed")
-            shared_secret = mlkem_decapsulate(_PQC_KEM_KEYS.kem, row["wrapped_key"])
-            aes_key = shared_secret[:32]
-
-        else:
-            continue
-
-        plaintext = aes_decrypt(aes_key, blob)
-        out.append(plaintext)
-
-    log_event(user_id, role, "READ_RECORD", patient_id, f"Decrypted {len(out)} record(s)")
-    return out
+@app.post("/verify_signature", response_model=VerifyResponse)
+def verify_signature(payload: VerifyRequest) -> VerifyResponse:
+    try:
+        valid = verify_message(
+            payload.public_key_b64,
+            payload.message,
+            payload.signature_b64,
+        )
+        return VerifyResponse(is_valid=valid)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Verification failed: {exc}") from exc
