@@ -1,277 +1,246 @@
-# Secure Electronic Health Record (EHR) System with Hybrid Encryption
+# Secure EHR System with Post-Quantum Cryptography
 
-![Python](https://img.shields.io/badge/Python-3.11-blue)
-![Encryption](https://img.shields.io/badge/Encryption-AES256%20%2B%20RSA2048-green)
-![Dataset](https://img.shields.io/badge/Dataset-MIMIC--IV-orange)
-![Status](https://img.shields.io/badge/Project-Research%20Prototype-purple)
+A demo Electronic Health Record (EHR) backend that uses post-quantum cryptography for secure key establishment and digital signatures. The project combines **ML-KEM-768** (the NIST-standardized form of CRYSTALS-Kyber), **ML-DSA-65** (the NIST-standardized form of CRYSTALS-Dilithium), and **AES-256-GCM** for encrypted patient record handling. NIST finalized ML-KEM in FIPS 203 and ML-DSA in FIPS 204 in August 2024, and the current `pqcrypto` package exposes these standardized algorithm names directly. citeturn477623search0turn477623search1turn493707view0
 
----
+## Project Status
 
-## Project Overview
+Implemented now:
+- ML-KEM-768 key generation, encapsulation, and decapsulation
+- ML-DSA-65 key generation, signing, and verification
+- AES-256-GCM encryption and decryption for EHR payloads
+- FastAPI endpoints for key generation, record encryption/decryption, and signature verification
+- JSON-based API requests and responses using Pydantic models, which aligns with FastAPI's recommended request-body pattern. citeturn493707view1turn446490search5
 
-Healthcare systems store highly sensitive patient data including medical history, diagnoses, and treatment information. Protecting this data is critical to ensure **privacy, confidentiality, and regulatory compliance**.
+Planned next:
+- Database integration for persistent record storage
+- JWT authentication and RBAC
+- Audit logging
+- Frontend dashboard for doctors, admins, and patients
 
-This project implements a **Secure Electronic Health Record (EHR) System** using a **Hybrid Encryption Architecture**.
+## Algorithms Used
 
-The system uses:
+| Layer | Algorithm | Purpose |
+|---|---|---|
+| Key encapsulation | ML-KEM-768 | Shared secret generation |
+| Digital signature | ML-DSA-65 | Integrity and authentication |
+| Symmetric encryption | AES-256-GCM | Encrypt EHR content |
 
-- **AES-256-GCM** for encrypting medical records
-- **RSA-2048** for secure encryption key management
+## Why the Code Uses ML-KEM and ML-DSA Names
 
-Patient records are derived from the **MIMIC-IV clinical dataset**, encrypted, and stored securely in a database with **Role-Based Access Control (RBAC)**.
+Older project descriptions often say **Kyber** and **Dilithium**, but the NIST-standardized names are now **ML-KEM** and **ML-DSA**. This is why the Python imports in this implementation use:
 
----
+- `pqcrypto.kem.ml_kem_768`
+- `pqcrypto.sign.ml_dsa_65`
 
-# Key Features
+That naming matches the currently published standards and the latest `pqcrypto` release. citeturn477623search0turn477623search1turn493707view0
 
-- Hybrid encryption (**AES-256 + RSA-2048**)
-- Secure encrypted EHR database
-- Role-Based Access Control (RBAC)
-- Encryption benchmarking
-- Storage overhead analysis
-- Performance graph generation
-- Architecture ready for **Post-Quantum Cryptography**
+## Installation
 
----
+### 1. Clone the repository
 
-# System Architecture
-
-The system follows a **secure layered architecture**.
-
-### Frontend Layer *(Future Work)*
-
-- Doctor Portal
-- Patient Portal
-- Admin Dashboard
-
-### Backend Services
-
-- Encryption services
-- Decryption services
-- Authentication
-- RBAC verification
-
-### Security Layer
-
-- AES-256 encryption
-- RSA-2048 key wrapping
-- Secure authentication validation
-
-### Database Layer
-
-- Encrypted patient records
-- User and role data
-- Audit logs
-
----
-
-# Technologies Used
-
-| Technology | Purpose |
-|--------|--------|
-| Python 3.11 | Core implementation |
-| SQLite | Secure encrypted database |
-| AES-256-GCM | Data encryption |
-| RSA-2048 | Secure key wrapping |
-| Pandas | Dataset processing |
-| Matplotlib | Performance visualization |
-| MIMIC-IV | Healthcare dataset |
-
----
-
-# Dataset
-
-This project uses the **MIMIC-IV Clinical Database Demo Dataset**.
-
-Dataset contents include:
-
-- Patient demographics
-- Hospital admissions
-- Diagnosis codes
-- Clinical visit information
-
-Dataset Source:
-
-https://physionet.org/content/mimic-iv-demo/
-
-Example patient record:
-
-```json
-{
-  "patient_id": "10014354",
-  "admission_id": "29780751",
-  "admission_type": "OBSERVATION ADMIT",
-  "demographics": {
-    "gender": "M",
-    "age": 60
-  },
-  "diagnoses": [
-    {"icd_code": "I10"},
-    {"icd_code": "E039"}
-  ]
-}
-```
-
----
-
-# Project Structure
-
-```
-DBMS/
-│
-├── data/
-│   └── mimiciv_demo/
-│
-├── src/
-│   ├── api.py
-│   ├── crypto_aes.py
-│   ├── crypto_rsa.py
-│   ├── db.py
-│   └── mimic_loader.py
-│
-├── import_mimic.py
-├── check_decrypt.py
-├── benchmark_crypto.py
-├── measure_storage_overhead.py
-│
-├── encryption_time_distribution.png
-├── ciphertext_size_distribution.png
-│
-└── README.md
-```
-
----
-
-# Installation
-
-Clone repository:
-
-```
-git clone https://github.com/YOUR_USERNAME/secure-ehr-system.git
+```bash
+git clone https://github.com/Tejasrinayudu123/secure-ehr-system.git
 cd secure-ehr-system
 ```
 
-Create virtual environment:
+### 2. Create and activate a virtual environment
 
-```
+**Windows**
+```bash
 python -m venv .venv
+.venv\Scripts\activate
 ```
 
-Activate environment (Windows):
-
+**macOS / Linux**
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
 ```
-.\.venv\Scripts\activate
-```
 
-Install dependencies:
+### 3. Install dependencies
 
-```
+```bash
 pip install -r requirements.txt
 ```
 
----
+## Run the API
 
-# Running the Project
-
-### Import and Encrypt Dataset
-
-```
-python import_mimic.py
+```bash
+uvicorn src.api:app --reload
 ```
 
-This script:
+After the server starts, open:
 
-- Loads patient records
-- Encrypts them using AES-256
-- Wraps encryption keys using RSA-2048
-- Stores encrypted records in the database
+- Swagger UI: `http://127.0.0.1:8000/docs`
+- ReDoc: `http://127.0.0.1:8000/redoc`
 
----
+FastAPI automatically generates interactive API docs from your request/response models. citeturn493707view1turn446490search22
 
-### Test Decryption
+## API Endpoints
 
-```
-python check_decrypt.py
-```
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/` | API welcome message |
+| GET | `/health` | Health check |
+| GET | `/keys/kem` | Generate ML-KEM key pair |
+| GET | `/keys/sign` | Generate ML-DSA key pair |
+| POST | `/encrypt_record` | Encrypt a patient record |
+| POST | `/decrypt_record` | Decrypt a patient record |
+| POST | `/sign_data` | Sign a message |
+| POST | `/verify_signature` | Verify a signature |
 
-Verifies encrypted records can be securely decrypted.
+## Example 1: Generate KEM Keys
 
----
-
-### Run Encryption Benchmark
-
-```
-python benchmark_crypto.py
-```
-
-Measures:
-
-- Encryption time
-- Decryption time
-- Plaintext size distribution
-
----
-
-### Measure Storage Overhead
-
-```
-python measure_storage_overhead.py
+### Request
+```bash
+curl -X GET "http://127.0.0.1:8000/keys/kem"
 ```
 
-Measures:
+### Example Response
+```json
+{
+  "public_key_b64": "BASE64_PUBLIC_KEY",
+  "secret_key_b64": "BASE64_SECRET_KEY"
+}
+```
 
-- Ciphertext size
-- AES nonce size
-- RSA wrapped key size
-- Total storage overhead
+## Example 2: Encrypt an EHR Record
 
----
+### Request
+```bash
+curl -X POST "http://127.0.0.1:8000/encrypt_record" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "public_key_b64": "BASE64_PUBLIC_KEY",
+    "patient_id": "P1001",
+    "patient_name": "John Doe",
+    "diagnosis": "Hypertension",
+    "prescription": "Amlodipine 5mg"
+  }'
+```
 
-# Benchmark Results
+### Example Response
+```json
+{
+  "kem_ciphertext_b64": "BASE64_KEM_CIPHERTEXT",
+  "shared_secret_b64": "BASE64_SHARED_SECRET",
+  "aes_nonce_b64": "BASE64_NONCE",
+  "encrypted_record_b64": "BASE64_AES_CIPHERTEXT",
+  "plaintext_preview": "{\"patient_id\": \"P1001\", \"patient_name\": \"John Doe\", \"diagnosis\": \"Hypertension\", \"prescription\": \"Amlodipine 5mg\"}"
+}
+```
 
-| Metric | Value |
-|------|------|
-| Encryption Algorithm | AES-256-GCM |
-| Key Wrapping Algorithm | RSA-2048 |
-| Mean Encryption Time | ~27 ms |
-| Mean Decryption Time | ~15 ms |
-| Average Ciphertext Size | ~869 bytes |
-| Storage Overhead per Record | ~1137 bytes |
+## Example 3: Decrypt an EHR Record
 
----
+### Request
+```bash
+curl -X POST "http://127.0.0.1:8000/decrypt_record" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "secret_key_b64": "BASE64_SECRET_KEY",
+    "kem_ciphertext_b64": "BASE64_KEM_CIPHERTEXT",
+    "aes_nonce_b64": "BASE64_NONCE",
+    "encrypted_record_b64": "BASE64_AES_CIPHERTEXT"
+  }'
+```
 
-# Security Features
+### Example Response
+```json
+{
+  "record_json": "{\"patient_id\": \"P1001\", \"patient_name\": \"John Doe\", \"diagnosis\": \"Hypertension\", \"prescription\": \"Amlodipine 5mg\"}"
+}
+```
 
-The system ensures healthcare data security through:
+## Example 4: Generate Signature Keys
 
-- AES-256 encryption for patient records
-- RSA-2048 secure key wrapping
-- RBAC controlled data access
-- Encrypted database storage
+### Request
+```bash
+curl -X GET "http://127.0.0.1:8000/keys/sign"
+```
 
-The architecture is designed to support **future Post-Quantum Cryptography algorithms such as CRYSTALS-Kyber**.
+### Example Response
+```json
+{
+  "public_key_b64": "BASE64_SIGN_PUBLIC_KEY",
+  "secret_key_b64": "BASE64_SIGN_SECRET_KEY"
+}
+```
 
----
+## Example 5: Sign Data
 
-# Future Work
+### Request
+```bash
+curl -X POST "http://127.0.0.1:8000/sign_data" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "secret_key_b64": "BASE64_SIGN_SECRET_KEY",
+    "message": "patient_id=P1001|diagnosis=Hypertension"
+  }'
+```
 
-Future improvements may include:
+### Example Response
+```json
+{
+  "signature_b64": "BASE64_SIGNATURE"
+}
+```
 
-- Full healthcare dashboard frontend
-- Cloud-based EHR system
-- Post-Quantum Cryptography integration
-- Secure healthcare analytics
-- Blockchain-based audit logging
+## Example 6: Verify Signature
 
----
+### Request
+```bash
+curl -X POST "http://127.0.0.1:8000/verify_signature" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "public_key_b64": "BASE64_SIGN_PUBLIC_KEY",
+    "message": "patient_id=P1001|diagnosis=Hypertension",
+    "signature_b64": "BASE64_SIGNATURE"
+  }'
+```
 
-# Author
+### Example Response
+```json
+{
+  "is_valid": true
+}
+```
 
-**Tejasri Nayudu**  
-Master’s in Computer Science
+## Screenshot Section for GitHub README
 
----
+Add your real screenshots after running the app and save them in `docs/images/`.
 
-# License
+```md
+## API Screenshots
 
-This project is developed for academic and research purposes.
+### Swagger UI
+![Swagger UI](docs/images/swagger-home.png)
+
+### Encrypt Record Example
+![Encrypt Record Example](docs/images/encrypt-record-example.png)
+
+### Verify Signature Example
+![Verify Signature Example](docs/images/verify-signature-example.png)
+```
+
+Recommended screenshots to capture:
+1. `/docs` Swagger UI home page
+2. successful `/encrypt_record` request and response
+3. successful `/verify_signature` request and response
+
+## Security Notes
+
+This project is a learning and prototype implementation. In production, do not:
+- return shared secrets to clients in API responses
+- store private keys in plaintext
+- rely on demo-only request flows
+- skip authentication, authorization, and audit logging
+
+A production design should generate and protect keys in secure key stores or HSM-backed services, authenticate all users, and persist encrypted records in a real database.
+
+## References
+
+- NIST FIPS 203: ML-KEM standard. citeturn477623search0turn477623search4
+- NIST FIPS 204: ML-DSA standard. citeturn477623search1turn477623search3
+- NIST PQC project overview. citeturn477623search8turn477623search5
+- `pqcrypto` 0.4.0 package and supported algorithm names. citeturn493707view0
+- FastAPI request body and response model documentation. citeturn493707view1turn446490search5
