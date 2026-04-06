@@ -205,28 +205,6 @@ curl -X POST "http://127.0.0.1:8000/verify_signature" \
 }
 ```
 
-## Screenshot Section for GitHub README
-
-Add your real screenshots after running the app and save them in `docs/images/`.
-
-```md
-## API Screenshots
-
-### Swagger UI
-![Swagger UI](docs/images/swagger-home.png)
-
-### Encrypt Record Example
-![Encrypt Record Example](docs/images/encrypt-record-example.png)
-
-### Verify Signature Example
-![Verify Signature Example](docs/images/verify-signature-example.png)
-```
-
-Recommended screenshots to capture:
-1. `/docs` Swagger UI home page
-2. successful `/encrypt_record` request and response
-3. successful `/verify_signature` request and response
-
 ## Security Notes
 
 This project is a learning and prototype implementation. In production, do not:
